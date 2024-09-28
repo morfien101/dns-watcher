@@ -16,7 +16,7 @@ import (
 
 // Watcher holds the configuration for each DNS record
 type Watcher struct {
-	Record  string   `yaml:"record"`
+	Records []string `yaml:"records"`
 	Command string   `yaml:"command"`
 	Args    []string `yaml:"args"`
 }
@@ -56,40 +56,52 @@ func main() {
 	}
 
 	// Store the last known state of each watcher
-	lastState := make(map[string][]string)
+	lastState := map[int]map[string][]string{}
 	doChecks(config, lastState, false)
 	time.Sleep(time.Second * time.Duration(config.Sleep))
 
 	for {
 		doChecks(config, lastState, true)
 		// Sleep before next check (adjust the duration as needed)
+		log.Debugln("Last state:", lastState)
 		time.Sleep(time.Second * time.Duration(config.Sleep))
 	}
 }
 
-func doChecks(config *Config, lastState map[string][]string, triggerCommand bool) {
-	for _, watcher := range config.Watchers {
-		resolved, err := checkDNS(watcher.Record)
-		sort.Strings(resolved)
-		log.Debugf("Resolved DNS record %s to %v", watcher.Record, resolved)
+func doChecks(config *Config, lastState map[int]map[string][]string, noAction bool) {
+	for idx, watcher := range config.Watchers {
+		triggerCommand := false
+		for _, record := range watcher.Records {
+			resolved, err := checkDNS(record)
+			sort.Strings(resolved)
+			log.Debugf("Resolved DNS record %s to %v", record, resolved)
 
-		if err != nil {
-			log.Errorf("Error resolving DNS record %s: %v", watcher.Record, err)
-			continue
-		}
-
-		last, exists := lastState[watcher.Record]
-		if !exists || !isEqual(last, resolved) {
-			if triggerCommand {
-				log.Infof("DNS record %s changed. Executing command.", watcher.Record)
-				if err := executeCommand(watcher.Command, watcher.Args...); err != nil {
-					log.Errorf("Error executing command: %v", err)
-				}
+			if err != nil {
+				log.Errorf("Error resolving DNS record %s: %v", record, err)
+				continue
 			}
 
-			lastState[watcher.Record] = resolved
-		} else {
-			log.Infof("DNS record %s unchanged", watcher.Record)
+			last, exists := lastState[idx][record]
+			if !exists || !isEqual(last, resolved) {
+				if noAction {
+					log.Infof("DNS record %s changed. Executing command.", record)
+					triggerCommand = true
+				}
+
+				if _, ok := lastState[idx]; !ok {
+					lastState[idx] = map[string][]string{}
+				}
+
+				lastState[idx][record] = resolved
+			} else {
+				log.Infof("DNS record %s unchanged", record)
+			}
+		}
+		if triggerCommand {
+
+			if err := executeCommand(watcher.Command, watcher.Args...); err != nil {
+				log.Errorf("Error executing command: %v", err)
+			}
 		}
 	}
 }

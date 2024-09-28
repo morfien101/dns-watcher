@@ -7,12 +7,15 @@ var exampleConfig Config = Config{
 	LogLevel: "info",
 	Watchers: []Watcher{
 		{
-			Record:  "a.example.com",
+			Records: []string{
+				"a.example.com",
+				"b.example.com",
+			},
 			Command: "/bin/bash",
 			Args:    []string{"echo", "example.com has changed!"},
 		},
 		{
-			Record:  "b.example.com",
+			Records: []string{"c.example.com"},
 			Command: "/bin/bash",
 			Args:    []string{"systemctl", "restart", "nginx"},
 		},
